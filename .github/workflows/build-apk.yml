@@ -1,0 +1,132 @@
+name: Build LUCHSHIY Tools APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Find LUCHSHIY ZIP
+        run: |
+          ZIP=$(find . -maxdepth 1 -type f -iname 'luchshiy_tools*.zip' | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: luchshiy_tools ZIP not found!"
+            exit 1
+          fi
+
+          echo "Found ZIP: $ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Extract project
+        run: |
+          rm -rf project
+          mkdir project
+          unzip -q "$ZIP" -d project
+
+          echo "Project files:"
+          find project -maxdepth 5 -type f | sort
+
+      - name: Find index.html
+        run: |
+          INDEX=$(find project -type f -name "index.html" | head -n 1)
+
+          if [ -z "$INDEX" ]; then
+            echo "ERROR: index.html not found!"
+            exit 1
+          fi
+
+          WEB_DIR=$(dirname "$INDEX")
+
+          rm -rf www
+          mkdir www
+
+          cp -r "$WEB_DIR"/. www/
+
+          echo "Web application:"
+          find www -maxdepth 2 -type f | sort
+
+      - name: Create package.json
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "name": "luchshiy-tools",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/core": "8.5.2",
+              "@capacitor/android": "8.5.2"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "8.5.2"
+            }
+          }
+          EOF
+
+      - name: Create Capacitor config
+        run: |
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.luchshiy.tools",
+            "appName": "LUCHSHIY Tools",
+            "webDir": "www",
+            "bundledWebRuntime": false
+          }
+          EOF
+
+      - name: Install Capacitor
+        run: |
+          npm install
+
+      - name: Add Android platform
+        run: |
+          npx cap add android
+
+      - name: Sync Capacitor
+        run: |
+          npx cap sync android
+
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LUCHSHIY-Tools-APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
