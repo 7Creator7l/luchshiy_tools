@@ -8,9 +8,11 @@ on:
 
 jobs:
   build:
+    name: Build Android AAB
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -25,10 +27,57 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Check project files
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
         run: |
-          echo "Files in repository:"
-          find . -maxdepth 3 -type f | sort
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Find LUCHSHIY ZIP
+        run: |
+          ZIP=$(find . -maxdepth 1 -type f -iname 'luchshiy_tools*.zip' | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "LUCHSHIY ZIP not found!"
+            echo "Upload luchshiy_tools.zip to the root of the repository."
+            exit 1
+          fi
+
+          echo "Found: $ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Extract LUCHSHIY project
+        run: |
+          rm -rf project
+          mkdir project
+          unzip -q "$ZIP" -d project
+
+          echo "Extracted files:"
+          find project -maxdepth 4 -type f | sort
+
+      - name: Find web application
+        run: |
+          INDEX=$(find project -type f -name "index.html" | head -n 1)
+
+          if [ -z "$INDEX" ]; then
+            echo "index.html not found!"
+            exit 1
+          fi
+
+          echo "Found index.html:"
+          echo "$INDEX"
+
+          WEB_DIR=$(dirname "$INDEX")
+
+          rm -rf www
+          mkdir www
+
+          cp -r "$WEB_DIR"/. www/
+
+          echo "Web application:"
+          find www -maxdepth 2 -type f | sort
 
       - name: Create package.json
         run: |
@@ -62,28 +111,6 @@ jobs:
           export default config;
           EOF
 
-      - name: Prepare web files
-        run: |
-          mkdir -p www
-
-          if [ -f "www/index.html" ]; then
-            echo "www folder already exists."
-          elif [ -f "dist/index.html" ]; then
-            cp -r dist/* www/
-          elif [ -f "luchshiy_tools/dist/index.html" ]; then
-            cp -r luchshiy_tools/dist/* www/
-          elif [ -f "src/index.html" ]; then
-            cp -r src/* www/
-          elif [ -f "luchshiy_tools/src/index.html" ]; then
-            cp -r luchshiy_tools/src/* www/
-          else
-            echo "index.html not found!"
-            exit 1
-          fi
-
-          echo "Web files:"
-          find www -maxdepth 2 -type f | sort
-
       - name: Install Capacitor
         run: |
           npm install
@@ -95,14 +122,6 @@ jobs:
       - name: Sync Capacitor
         run: |
           npx cap sync android
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build Release AAB
         working-directory: android
