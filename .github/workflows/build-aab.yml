@@ -1,4 +1,4 @@
-name: Build LUCHSHIY Tools Release AAB
+name: Build LUCHSHIY Tools AAB
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Setup Java 21
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -33,40 +33,43 @@ jobs:
       - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Find LUCHSHIY ZIP
         run: |
           ZIP=$(find . -maxdepth 1 -type f -iname 'luchshiy_tools*.zip' | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "LUCHSHIY ZIP not found!"
-            echo "Upload luchshiy_tools.zip to the root of the repository."
+            echo "ERROR: luchshiy_tools ZIP not found!"
             exit 1
           fi
 
-          echo "Found: $ZIP"
+          echo "Found ZIP: $ZIP"
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Extract LUCHSHIY project
+      - name: Extract project
         run: |
           rm -rf project
           mkdir project
+
           unzip -q "$ZIP" -d project
 
-          echo "Extracted files:"
-          find project -maxdepth 4 -type f | sort
+          echo "Project files:"
+          find project -maxdepth 5 -type f | sort
 
-      - name: Find web application
+      - name: Find index.html
         run: |
           INDEX=$(find project -type f -name "index.html" | head -n 1)
 
           if [ -z "$INDEX" ]; then
-            echo "index.html not found!"
+            echo "ERROR: index.html not found!"
             exit 1
           fi
 
-          echo "Found index.html:"
+          echo "Found:"
           echo "$INDEX"
 
           WEB_DIR=$(dirname "$INDEX")
@@ -86,6 +89,7 @@ jobs:
             "name": "luchshiy-tools",
             "version": "1.0.0",
             "private": true,
+            "description": "LUCHSHIY Tools Android App",
             "dependencies": {
               "@capacitor/core": "8.5.2",
               "@capacitor/android": "8.5.2"
@@ -98,17 +102,13 @@ jobs:
 
       - name: Create Capacitor config
         run: |
-          cat > capacitor.config.ts <<'EOF'
-          import type { CapacitorConfig } from '@capacitor/cli';
-
-          const config: CapacitorConfig = {
-            appId: 'com.luchshiy.tools',
-            appName: 'LUCHSHIY Tools',
-            webDir: 'www',
-            bundledWebRuntime: false
-          };
-
-          export default config;
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.luchshiy.tools",
+            "appName": "LUCHSHIY Tools",
+            "webDir": "www",
+            "bundledWebRuntime": false
+          }
           EOF
 
       - name: Install Capacitor
