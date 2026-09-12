@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm install
@@ -27,7 +26,7 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Sync web project
+      - name: Sync Capacitor
         run: npx cap sync android
 
       - name: Setup Java
@@ -36,7 +35,7 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Build Release AAB
+      - name: Build AAB
         working-directory: android
         run: |
           chmod +x gradlew
