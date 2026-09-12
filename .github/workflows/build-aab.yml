@@ -1,48 +1,118 @@
-name: Build LUCHSHIY AAB
+name: Build LUCHSHIY Tools Release AAB
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build Android AAB
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Add Android platform
-        run: npx cap add android
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Setup Java
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: '21'
 
-      - name: Build AAB
+      - name: Check project files
+        run: |
+          echo "Files in repository:"
+          find . -maxdepth 3 -type f | sort
+
+      - name: Create package.json
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "name": "luchshiy-tools",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/core": "8.5.2",
+              "@capacitor/android": "8.5.2"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "8.5.2"
+            }
+          }
+          EOF
+
+      - name: Create Capacitor config
+        run: |
+          cat > capacitor.config.ts <<'EOF'
+          import type { CapacitorConfig } from '@capacitor/cli';
+
+          const config: CapacitorConfig = {
+            appId: 'com.luchshiy.tools',
+            appName: 'LUCHSHIY Tools',
+            webDir: 'www',
+            bundledWebRuntime: false
+          };
+
+          export default config;
+          EOF
+
+      - name: Prepare web files
+        run: |
+          mkdir -p www
+
+          if [ -f "www/index.html" ]; then
+            echo "www folder already exists."
+          elif [ -f "dist/index.html" ]; then
+            cp -r dist/* www/
+          elif [ -f "luchshiy_tools/dist/index.html" ]; then
+            cp -r luchshiy_tools/dist/* www/
+          elif [ -f "src/index.html" ]; then
+            cp -r src/* www/
+          elif [ -f "luchshiy_tools/src/index.html" ]; then
+            cp -r luchshiy_tools/src/* www/
+          else
+            echo "index.html not found!"
+            exit 1
+          fi
+
+          echo "Web files:"
+          find www -maxdepth 2 -type f | sort
+
+      - name: Install Capacitor
+        run: |
+          npm install
+
+      - name: Add Android platform
+        run: |
+          npx cap add android
+
+      - name: Sync Capacitor
+        run: |
+          npx cap sync android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build Release AAB
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease
+          ./gradlew bundleRelease --no-daemon
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: LUCHSHIY-AAB
+          name: LUCHSHIY-Tools-Release-AAB
           path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
